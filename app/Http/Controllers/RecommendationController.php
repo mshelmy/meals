@@ -7,11 +7,20 @@ use Illuminate\Support\Facades\Validator;
 
 use App\Http\Resources\RestaurantCollection;
 use App\Models\Restaurant;
+use App\Repositories\RecommendationRepositoryInterface;
 
 use \DB;
 
 class RecommendationController extends Controller
 {
+
+    private $recommendationRepository;
+  
+    public function __construct(RecommendationRepositoryInterface $recommendationRepository)
+    {
+        $this->recommendationRepository = $recommendationRepository;
+    }
+
     /**
      * Meal Recommender
      *
@@ -20,8 +29,11 @@ class RecommendationController extends Controller
      */
     public function recommend(Request $request)
     {
+        // Request Parameters
+        $data = $request->all();
+        
         // Request Validation
-        $validator = Validator::make($request->all(), [
+        $validator = Validator::make($data, [
             'mealName' => 'required|max:255',
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric'
@@ -37,35 +49,10 @@ class RecommendationController extends Controller
             );
         }
 
-        // Request Data
-        $mealName = $request->mealName;
-        $latitude = $request->latitude;
-        $longitude = $request->longitude;
+        $restaurants = $this->recommendationRepository->find($data);
 
-        // Ranking Query
-        $restaurantsIds = DB::table('restaurants')
-            ->join('meal_restaurant', 'restaurants.id', '=', 'meal_restaurant.restaurant_id')
-            ->join('meals', 'meals.id', '=', 'meal_restaurant.meal_id')
-            ->select(
-                'restaurants.id',
-                DB::raw("
-                    ( ( 3959 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) 
-                    + sin(radians(?)) * sin(radians(latitude ))) ) * 10 
-                    + recommendations_count * 5 + meal_recommendations_count * 3 
-                    + successful_orders_count * 5 ) AS result"
-                )
-            )
-            ->whereRaw('meals.name = ?')
-            ->groupBy("restaurants.id")
-            ->orderBy("result", 'DESC')
-            ->offset(0)
-            ->limit(3)
-            ->setBindings([$latitude, $longitude, $latitude, $mealName])
-            ->pluck('restaurants.id')
-            ->toArray();
-        
         // No Meals Found
-        if(empty($restaurantsIds)){
+        if(!$restaurants->count()){
             return response()->json(
                 [
                     'errors' => ['No Meal Found.']
@@ -74,10 +61,7 @@ class RecommendationController extends Controller
             );
         }
 
-        // Get Restaurants Resources And Return Response
-        $restaurants = Restaurant::whereIn('id', $restaurantsIds)
-            ->orderBy(DB::raw('FIELD(`id`, '.implode(',', $restaurantsIds).')'))
-            ->get();
+        
         return new RestaurantCollection($restaurants);
     }
 }
