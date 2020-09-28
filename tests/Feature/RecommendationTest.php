@@ -6,6 +6,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Tests\TestCase;
 
+use App\Repositories\Eloquent\RecommendationRepository;
+use App\Models\Restaurant;
+
 class RecommendationTest extends TestCase
 {
     /**
@@ -29,6 +32,11 @@ class RecommendationTest extends TestCase
             3, 
             $response->decodeResponseJson()['data']
         ); 
+
+        $restaurant = new Restaurant();
+        $recommendationRepository = new RecommendationRepository($restaurant);
+        $restaurants = $recommendationRepository->find($data)->toArray();
+        $this->assertEquals($restaurants, $response->decodeResponseJson()['data']);
     }
 
     /**
